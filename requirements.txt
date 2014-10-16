@@ -1,4 +1,4 @@
+astropy
 numpy
 matplotlib
 pyfits
-astropy
