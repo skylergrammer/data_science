@@ -1,0 +1,15 @@
+<!doctype HTML PUBLIC "-//W3C//DTD HTML 4.01//EN">
+<html>
+  <head>
+    {% block head %}
+    {% include 'css.html' %}
+
+    <!-- Title -->
+    <title>{% block title %}{% endblock %} - Coding Shits</title>
+    {% endblock %}
+  </head>
+  {% block body %}
+  {% endblock %}
+
+  {% include 'js.html' %}
+</html>
