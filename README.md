@@ -1,3 +1,6 @@
+# 10/20/14
+  Gordon:  added super jank process_text code
+
 # 10/18/14
   Gordon:  learned Flask!
   downloaded a bootstrap html template
