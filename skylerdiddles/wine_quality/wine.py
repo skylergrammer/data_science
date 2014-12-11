@@ -1,8 +1,10 @@
+#!/usr/bin/env python
+
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 import pandas as pd
-
+import scipy.stats
 
 def read_data(filename):
 
@@ -35,10 +37,9 @@ def make_histograms(data):
       ax[i,j].tick_params(axis='both', which='both', bottom="off",left="off",
                           labelbottom="off", labelleft="off")
 
-  plt.show()
 
 
-def correlation_matrix(data, target_name):
+def correlation_matrix(data, target_name=None):
 
   # Matrix of predictor data
   predictors = [data[x] for x in data if x != target_name]
@@ -46,12 +47,25 @@ def correlation_matrix(data, target_name):
   # Compute correlation coefficients matrix
   cor_matrix = np.corrcoef(predictors)
   
-  # Print out matrix; mask out values < 0.75
+  # Print out matrix; mask out values < 0.7
   for row in cor_matrix: 
-    row = " ".join(["{:2}".format(x) if np.abs(x) > 0.75 else `0` for x in row ])
+    row = " ".join(["{:3.2}".format(x) if np.abs(x) > 0.75 else `0.00` for x in row ])
     print(row)
 
   return cor_matrix
+
+
+def zscores(data, target="None"):
+
+  for key in data:
+    if key != target:
+      std = np.nanstd(data[key])
+      mean = np.nanmean(data[key])
+      
+      z = (data[key]-mean) / std
+      data[key] = z
+
+  return data
 
 
 def main():
@@ -60,14 +74,14 @@ def main():
   parser.add_argument("input")
   args = parser.parse_args()
 
-  target = "quality score"
+  target = "quality"
 
   data = read_data(args.input)
 
-  cor_matrix = correlation_matrix(data, target)
-  
-  
-  make_histograms(data)
+  cor_matrix = correlation_matrix(data)  
+
+  zdata = zscores(data, target=target)
+
 
 if __name__ == "__main__":
   main()
