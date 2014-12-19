@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
@@ -12,6 +11,8 @@ from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.structure.modules import SoftmaxLayer
 from pybrain.utilities import percentError
 import random
+import progressbar as pbar
+
 
 def read_data(filename):
   '''
@@ -97,13 +98,31 @@ def zscores(data, target="None"):
   return zdata
 
 
-def contingency_table(actual, predicted):
+def success_rate(actual, predicted, show=False):
 
-  ratio = np.array(predicted) / np.array(actual)
+  # Difference between actual and predicted quality scores
+  diff = np.array(predicted) - np.array(actual)
+ 
+  # Number of records correctly predicted
+  success = np.where(diff == 0)[0]
+  # Number of almost-correctly-predicted records
+  almost = np.where(np.abs(diff) == 1)[0]
 
-  success = np.where(ratio == 1.0)[0]
+  accuracy = (float(len(success))/float(len(diff)), 
+              float(len(almost)+len(success))/float(len(diff))) 
 
-  return float(len(success))/float(len(ratio))
+  # Show a histogram of difference between predicted and actual    
+  if show:
+    max_diff = np.max(diff)
+    min_diff = np.min(diff)
+    nbins = max_diff - min_diff
+
+    plt.hist(diff, bins=int(nbins), normed=True, align="left")
+    plt.title(["%0.2f" % x for x in accuracy])
+    plt.show()
+
+
+  return accuracy[0]
 
 
 def recode_to_nbins(x, nbins=3, use_split_vals=False):
@@ -219,42 +238,70 @@ class NeuralNet:
     
 
 
+def lets_figure_shit_out(NNdata, niter=100, verbose=False):
 
-def lets_figure_shit_out(NNdata, niter=100):
-
+  # Parameter distributions
   learning_rates_decay = np.linspace(0, 1.0, 11)
   learning_rates = np.logspace(0,5, 6)*0.00001
   momenta = np.linspace(0, 1, 11)
   weights_decay = np.linspace(0, 1, 11)
 
-  output = []
+  # Empty variables to hold stuff
+  best_accuracy = 0
+  best_params = []
 
-  for each in range(niter):
+  # File to write params to
+  f = open("parameter_search.txt", "w+")
+  f.write(" ".join("%10s" % x for x in ["i","lr","lrdecay","p","wd","accuracy"])+"\n")
+  
+  prog = pbar.ProgressBar()
+  for each in prog(range(niter)):
 
+    # Random choice from parameter distributions
     lrdecay = random.choice(learning_rates_decay)
     lr = random.choice(learning_rates)
     p = random.choice(momenta)
     wd = random.choice(weights_decay)
-    epoch = random.choice(max_epochs)
 
+    # Run NN with max 50 training epochs
     NNdata.constructNN(lr=lr, lrdecay=lrdecay, wd=wd, p=p)
-    predicted_quality, x, y = NNdata.runNN(epochs=10)
-    accuracy = contingency_table(NNdata.target, predicted_quality)
+    predicted_quality, x, y = NNdata.runNN(epochs=100)
     
-    params = (each, epoch, lrdecay, lr, p, wd, accuracy)
+    # Compute accuracy
+    accuracy = success_rate(NNdata.target, predicted_quality)
+    params = [each, np.log10(lr), lrdecay, p, wd]
 
-    print("learning rate decay = %s" % lrdecay)
-    print("learning rate = %s" % lr)
-    print("weights decay = %s" % wd)
-    print("momentum = %s" % p)
-    print("Max epochs = %s" % 10)
-    print("Accuracy = %0.2f" % accuracy)
-    exit()
+    # Check to see if accuracy has improved
+    if accuracy > best_accuracy:
+      best_accuracy = accuracy
+      best_params = params
+      print("Best accuracy so far: %0.3f" % best_accuracy)
+    
+    # Write data to file
+    accuracy = "%0.2f" % accuracy
+    params.append(accuracy)
+    f.write(" ".join(['%10s' % x for x in params])+"\n")
+
+    # Print stuff if you want to see it: slows the code
+    if verbose:
+      print("iteration = %s" % each)
+      print("learning rate decay = %s" % lrdecay)
+      print("learning rate = %s" % lr)
+      print("weights decay = %s" % wd)
+      print("momentum = %s" % p)
+      print("Max epochs = %s" % 10)
+      print("ACCURACY = %s\n" % accuracy)
+
+  f.close()
+    
+  return best_params
 
 def main():
   
   parser = argparse.ArgumentParser()
   parser.add_argument("input")
+  parser.add_argument("--nn", action="store_true")
+  parser.add_argument("--search", action="store_true")
   args = parser.parse_args()
 
   # Identify target column
@@ -271,23 +318,27 @@ def main():
   # Transform data to z-scores (mean=0, std=1)
   zdata = zscores(data, target=target)
 
-  # Object to hold data readable by neural network
-  NNdata = NeuralNet(zdata, target, nclasses=10)
+  if args.nn:
+    # Object to hold data readable by neural network
+    NNdata = NeuralNet(zdata, target, nclasses=10)
 
-  lets_figure_shit_out(NNdata, niter=10)
-  
-  '''
-  # Construct the neural network
-  NNdata.constructNN(lr=1.0, lrdecay=0.1, wd=0.5, p=0.8)
+    if args.search:
+      best_params = lets_figure_shit_out(NNdata, niter=100)
+      print(["%s" % x for x in best_params])
+      exit()
 
-  # Train the neural network and output predicted values
-  predicted_quality, x, y = NNdata.runNN(epochs=1)
+    # Construct the neural network
+    NNdata.constructNN(lrdecay=0.1, lr=2.0, p=0.8, wd=0.5)
 
-  # Compute the accuracy neural network predictions
-  accuracy = contingency_table(NNdata.target, predicted_quality)
-  
-  print("\nAccuracy = %s.\n" % accuracy)
-  '''
+    # Train the neural network and output predicted values
+    predicted_quality, x, y = NNdata.runNN(epochs=10)
+
+    # Compute the accuracy neural network predictions
+    accuracy = success_rate(NNdata.target, predicted_quality, show=True)
+    
+    print("\nAccuracy = %0.2f\n" % accuracy)
+
+
 if __name__ == "__main__":
   main()
 
