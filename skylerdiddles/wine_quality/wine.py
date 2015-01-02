@@ -185,7 +185,7 @@ class NeuralNet:
     assert self.N_predictors > 0
 
   
-  def constructNN(self, lr=0.1, wd=0.01, p=0.1, lrdecay=0.0):
+  def constructNN(self, lr=0.1, wd=0.001, p=0.1, lrdecay=0.0, verbose=False):
     
     # Contsuct dataset structure for NN  
     ds = pybrain.datasets.ClassificationDataSet(self.N_predictors, 1, 
@@ -196,20 +196,20 @@ class NeuralNet:
     # Construct the training and testing data sets
     ds._convertToOneOfMany()
     
-    '''  
-    print "\nNumber of training patterns: ", len(ds)
-    print "Input and output dimensions: ", ds.indim, ds.outdim
-    print "First sample (input, target, class):"
-    print ds['input'][0], ds['target'][0], ds['class'][0]
-    print "Learning rate = %s" % lr    
-    print "Weight decay = %s" % wd
-    print "Momentum = %s" % p
-    print "Learning rate decay = %s\n" % lrdecay
-    '''
+    if verbose:
+      print "\nNumber of training patterns: ", len(ds)
+      print "Input and output dimensions: ", ds.indim, ds.outdim
+      print "First sample (input, target, class):"
+      print ds['input'][0], ds['target'][0], ds['class'][0]
+      print "Learning rate = %s" % lr    
+      print "Weight decay = %s" % wd
+      print "Momentum = %s" % p
+      print "Learning rate decay = %s\n" % lrdecay
+    
 
     # Number of neurons per layer
     input_layer_nodes = ds.indim
-    hidden_layer_nodes = (ds.indim+ds.outdim) / 1.5
+    hidden_layer_nodes = (ds.indim+ds.outdim)*3.0
     output_layer_nodes = ds.outdim
 
     # Construct the network object 
@@ -226,81 +226,23 @@ class NeuralNet:
  
 
   def runNN(self, epochs=20):
-
+    print("Runnning %s training epochs." % epochs)
     # Train network until error function converges
-    x,y = self.trainer.trainUntilConvergence(verbose = False, validationProportion = 0.10, 
-                                       maxEpochs = epochs, continueEpochs=10)
-
+    x,y = self.trainer.trainUntilConvergence(verbose = False, validationProportion = 0.25, 
+                                             maxEpochs = epochs, continueEpochs=10)
+    #self.trainer.trainEpochs(epochs=epochs)
+    #self.trainer.trainOnDataset(self.ds)
     # Network predicted values for data set
     prediction = self.trainer.testOnClassData(self.ds)
 
-    return (prediction, x, y)
+    return prediction
     
-
-
-def lets_figure_shit_out(NNdata, niter=100, verbose=False):
-
-  # Parameter distributions
-  learning_rates_decay = np.linspace(0, 1.0, 11)
-  learning_rates = np.logspace(0,5, 6)*0.00001
-  momenta = np.linspace(0, 1, 11)
-  weights_decay = np.linspace(0, 1, 11)
-
-  # Empty variables to hold stuff
-  best_accuracy = 0
-  best_params = []
-
-  # File to write params to
-  f = open("parameter_search.txt", "w+")
-  f.write(" ".join("%10s" % x for x in ["i","lr","lrdecay","p","wd","accuracy"])+"\n")
-  
-  prog = pbar.ProgressBar()
-  for each in prog(range(niter)):
-
-    # Random choice from parameter distributions
-    lrdecay = random.choice(learning_rates_decay)
-    lr = random.choice(learning_rates)
-    p = random.choice(momenta)
-    wd = random.choice(weights_decay)
-
-    # Run NN with max 50 training epochs
-    NNdata.constructNN(lr=lr, lrdecay=lrdecay, wd=wd, p=p)
-    predicted_quality, x, y = NNdata.runNN(epochs=100)
-    
-    # Compute accuracy
-    accuracy = success_rate(NNdata.target, predicted_quality)
-    params = [each, np.log10(lr), lrdecay, p, wd]
-
-    # Check to see if accuracy has improved
-    if accuracy > best_accuracy:
-      best_accuracy = accuracy
-      best_params = params
-      print("Best accuracy so far: %0.3f" % best_accuracy)
-    
-    # Write data to file
-    accuracy = "%0.2f" % accuracy
-    params.append(accuracy)
-    f.write(" ".join(['%10s' % x for x in params])+"\n")
-
-    # Print stuff if you want to see it: slows the code
-    if verbose:
-      print("iteration = %s" % each)
-      print("learning rate decay = %s" % lrdecay)
-      print("learning rate = %s" % lr)
-      print("weights decay = %s" % wd)
-      print("momentum = %s" % p)
-      print("Max epochs = %s" % 10)
-      print("ACCURACY = %s\n" % accuracy)
-
-  f.close()
-    
-  return best_params
 
 def main():
   
   parser = argparse.ArgumentParser()
   parser.add_argument("input")
-  parser.add_argument("--nn", action="store_true")
+  parser.add_argument("--v", action="store_true")
   parser.add_argument("--search", action="store_true")
   args = parser.parse_args()
 
@@ -318,25 +260,19 @@ def main():
   # Transform data to z-scores (mean=0, std=1)
   zdata = zscores(data, target=target)
 
-  if args.nn:
-    # Object to hold data readable by neural network
-    NNdata = NeuralNet(zdata, target, nclasses=10)
+  # Object to hold data readable by neural network
+  NNdata = NeuralNet(zdata, target, nclasses=10)
 
-    if args.search:
-      best_params = lets_figure_shit_out(NNdata, niter=100)
-      print(["%s" % x for x in best_params])
-      exit()
+  # Construct the neural network
+  NNdata.constructNN(lrdecay=1.0, lr=0.1, p=0.0, wd=0.0, verbose=args.v)
 
-    # Construct the neural network
-    NNdata.constructNN(lrdecay=0.1, lr=2.0, p=0.8, wd=0.5)
+  # Train the neural network and output predicted values
+  predicted_quality = NNdata.runNN(epochs=100)
 
-    # Train the neural network and output predicted values
-    predicted_quality, x, y = NNdata.runNN(epochs=10)
-
-    # Compute the accuracy neural network predictions
-    accuracy = success_rate(NNdata.target, predicted_quality, show=True)
-    
-    print("\nAccuracy = %0.2f\n" % accuracy)
+  # Compute the accuracy neural network predictions
+  accuracy = success_rate(NNdata.target, predicted_quality, show=True)
+  
+  print("\nAccuracy = %0.2f\n" % accuracy)
 
 
 if __name__ == "__main__":
