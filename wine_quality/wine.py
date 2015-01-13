@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
@@ -12,6 +11,8 @@ from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.structure.modules import SoftmaxLayer
 from pybrain.utilities import percentError
 import random
+
+
 
 def read_data(filename):
   '''
@@ -97,13 +98,31 @@ def zscores(data, target="None"):
   return zdata
 
 
-def contingency_table(actual, predicted):
+def success_rate(actual, predicted, show=False):
 
-  ratio = np.array(predicted) / np.array(actual)
+  # Difference between actual and predicted quality scores
+  diff = np.array(predicted) - np.array(actual)
+ 
+  # Number of records correctly predicted
+  success = np.where(diff == 0)[0]
+  # Number of almost-correctly-predicted records
+  almost = np.where(np.abs(diff) == 1)[0]
 
-  success = np.where(ratio == 1.0)[0]
+  accuracy = (float(len(success))/float(len(diff)), 
+              float(len(almost)+len(success))/float(len(diff))) 
 
-  return float(len(success))/float(len(ratio))
+  # Show a histogram of difference between predicted and actual    
+  if show:
+    max_diff = np.max(diff)
+    min_diff = np.min(diff)
+    nbins = max_diff - min_diff
+
+    plt.hist(diff, bins=int(nbins), normed=True, align="left")
+    plt.title(["%0.2f" % x for x in accuracy])
+    plt.show()
+
+
+  return accuracy[0]
 
 
 def recode_to_nbins(x, nbins=3, use_split_vals=False):
@@ -166,7 +185,7 @@ class NeuralNet:
     assert self.N_predictors > 0
 
   
-  def constructNN(self, lr=0.1, wd=0.01, p=0.1, lrdecay=0.0):
+  def constructNN(self, lr=0.1, wd=0.001, p=0.1, lrdecay=0.0, verbose=False):
     
     # Contsuct dataset structure for NN  
     ds = pybrain.datasets.ClassificationDataSet(self.N_predictors, 1, 
@@ -177,20 +196,20 @@ class NeuralNet:
     # Construct the training and testing data sets
     ds._convertToOneOfMany()
     
-    '''  
-    print "\nNumber of training patterns: ", len(ds)
-    print "Input and output dimensions: ", ds.indim, ds.outdim
-    print "First sample (input, target, class):"
-    print ds['input'][0], ds['target'][0], ds['class'][0]
-    print "Learning rate = %s" % lr    
-    print "Weight decay = %s" % wd
-    print "Momentum = %s" % p
-    print "Learning rate decay = %s\n" % lrdecay
-    '''
+    if verbose:
+      print "\nNumber of training patterns: ", len(ds)
+      print "Input and output dimensions: ", ds.indim, ds.outdim
+      print "First sample (input, target, class):"
+      print ds['input'][0], ds['target'][0], ds['class'][0]
+      print "Learning rate = %s" % lr    
+      print "Weight decay = %s" % wd
+      print "Momentum = %s" % p
+      print "Learning rate decay = %s\n" % lrdecay
+    
 
     # Number of neurons per layer
     input_layer_nodes = ds.indim
-    hidden_layer_nodes = (ds.indim+ds.outdim) / 1.5
+    hidden_layer_nodes = (ds.indim+ds.outdim)*3.0
     output_layer_nodes = ds.outdim
 
     # Construct the network object 
@@ -207,54 +226,24 @@ class NeuralNet:
  
 
   def runNN(self, epochs=20):
-
+    print("Runnning %s training epochs." % epochs)
     # Train network until error function converges
-    x,y = self.trainer.trainUntilConvergence(verbose = False, validationProportion = 0.10, 
-                                       maxEpochs = epochs, continueEpochs=10)
-
+    x,y = self.trainer.trainUntilConvergence(verbose = False, validationProportion = 0.25, 
+                                             maxEpochs = epochs, continueEpochs=10)
+    #self.trainer.trainEpochs(epochs=epochs)
+    #self.trainer.trainOnDataset(self.ds)
     # Network predicted values for data set
     prediction = self.trainer.testOnClassData(self.ds)
 
-    return (prediction, x, y)
+    return prediction
     
-
-
-
-def lets_figure_shit_out(NNdata, niter=100):
-
-  learning_rates_decay = np.linspace(0, 1.0, 11)
-  learning_rates = np.logspace(0,5, 6)*0.00001
-  momenta = np.linspace(0, 1, 11)
-  weights_decay = np.linspace(0, 1, 11)
-
-  output = []
-
-  for each in range(niter):
-
-    lrdecay = random.choice(learning_rates_decay)
-    lr = random.choice(learning_rates)
-    p = random.choice(momenta)
-    wd = random.choice(weights_decay)
-    epoch = random.choice(max_epochs)
-
-    NNdata.constructNN(lr=lr, lrdecay=lrdecay, wd=wd, p=p)
-    predicted_quality, x, y = NNdata.runNN(epochs=10)
-    accuracy = contingency_table(NNdata.target, predicted_quality)
-    
-    params = (each, epoch, lrdecay, lr, p, wd, accuracy)
-
-    print("learning rate decay = %s" % lrdecay)
-    print("learning rate = %s" % lr)
-    print("weights decay = %s" % wd)
-    print("momentum = %s" % p)
-    print("Max epochs = %s" % 10)
-    print("Accuracy = %0.2f" % accuracy)
-    exit()
 
 def main():
   
   parser = argparse.ArgumentParser()
   parser.add_argument("input")
+  parser.add_argument("--v", action="store_true")
+  parser.add_argument("--search", action="store_true")
   args = parser.parse_args()
 
   # Identify target column
@@ -274,20 +263,18 @@ def main():
   # Object to hold data readable by neural network
   NNdata = NeuralNet(zdata, target, nclasses=10)
 
-  lets_figure_shit_out(NNdata, niter=10)
-  
-  '''
   # Construct the neural network
-  NNdata.constructNN(lr=1.0, lrdecay=0.1, wd=0.5, p=0.8)
+  NNdata.constructNN(lrdecay=1.0, lr=0.1, p=0.0, wd=0.0, verbose=args.v)
 
   # Train the neural network and output predicted values
-  predicted_quality, x, y = NNdata.runNN(epochs=1)
+  predicted_quality = NNdata.runNN(epochs=1000)
 
   # Compute the accuracy neural network predictions
-  accuracy = contingency_table(NNdata.target, predicted_quality)
+  accuracy = success_rate(NNdata.target, predicted_quality, show=True)
   
-  print("\nAccuracy = %s.\n" % accuracy)
-  '''
+  print("\nAccuracy = %0.2f\n" % accuracy)
+
+
 if __name__ == "__main__":
   main()
 

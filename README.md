@@ -1,15 +1,11 @@
-# 10/20/14
-  Gordon:  added super jank process_text code
+Various Data Science Projects
+=============================
 
-# 10/18/14
-  Gordon:  learned Flask!
-  downloaded a bootstrap html template
-  used flask to render page
-  
-  > cd site_template
-  > python index.py
-  --> open browser at displayed url
+This repository contains a subset of my various data science side projects. 
 
-# 10/16/14
-   test of git hook post-merge again
-   (.Y.)   8=====D
+Contents
+--------
+1. vehicles_co2: predicting CO2 ouput based on engine displacement and gas mileage using a Kernel Ridge Regression algorithm from mply.  
+2. wine_quality: predicting the quality of wine from physiochemical properties using a Back Propagating Neural Network from PyBrain.  
+
+

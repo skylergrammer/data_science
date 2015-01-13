@@ -11,7 +11,7 @@ from pybrain.supervised.trainers import BackpropTrainer
 from pybrain.structure.modules import SoftmaxLayer
 from pybrain.utilities import percentError
 import random
-import progressbar as pbar
+
 
 
 def read_data(filename):
@@ -267,7 +267,7 @@ def main():
   NNdata.constructNN(lrdecay=1.0, lr=0.1, p=0.0, wd=0.0, verbose=args.v)
 
   # Train the neural network and output predicted values
-  predicted_quality = NNdata.runNN(epochs=100)
+  predicted_quality = NNdata.runNN(epochs=200)
 
   # Compute the accuracy neural network predictions
   accuracy = success_rate(NNdata.target, predicted_quality, show=True)
