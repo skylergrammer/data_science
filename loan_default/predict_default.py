@@ -4,10 +4,15 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import argparse
-import mlpy
-from sklearn.cross_validation import train_test_split
 import datetime
 import random
+import scipy.stats
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import confusion_matrix
+from sklearn.learning_curve import learning_curve
+
 
 def get_data(filename):
 
@@ -23,112 +28,145 @@ def get_data(filename):
   # Derive age from DOB
   age = np.array([datetime.date.today().year - datetime.datetime.strptime(x, "%Y-%m-%d").year
                   for x in df["dob"]])
-
   df["age"] = age
+
+  # Isolate default and convert to default = 1 and Repaid = 0
+  default = df["default"]
+  y = np.where(default == "Default", 1, 0)  
 
   # Remove columns not used for anything
   useless_labels = ["key", "fname", "mname", "lname", "generation", "dob", "dod", 
                     "addr1", "city", "country", "postcode", "phone", "email", 
                     "website", "ssn_last4", "drlic", "passport", "gov_id", 
-                    "address", "pending", "ssn"]
+                    "address", "pending", "ssn", "default"]
 
   df.drop(useless_labels, axis=1, inplace=True)
 
-  return df
+  # A list of features used (just for reference)
+  features = ["creddebt", "debtinc", "othdebt", "age", "employ", "gender" ]
+
+  # Convert gender to Male = 1 and Female = 0  
+  df["gender"] = np.where(df["gender"] == "M", 1, 0)
   
-def normalize_variables(df):
-  '''
-  Encode continuous variables to a new variable with mean = 0 and std = 1. 
-  Categorical variables are encoded to integer variables with categories taking
-  values 0 to N-1, where N is the number of unique string categories.
-  '''
+  # Float matrix of features
+  X = df.as_matrix().astype(np.float)
 
-  df2 = df.copy(deep=True)
+  # Rescale the features to a mean of 0 and range -1 to 1
+  scaler = StandardScaler()
+  X = scaler.fit_transform(X)
 
-  for each in df2:
+  Xr = np.tile(X,(100,1))
 
-    variable = df2[each]
-
-    if type(variable[0]) is str:
-      set_values, encoded = np.unique(variable, return_inverse=True)
-
-    elif type(variable[0]) is np.float64:
-      standard_dev = np.std(variable)
-      mean = np.mean(variable)
-      encoded = (variable - mean) / standard_dev
-
-    else:
-      encoded = variable
-
-    df2[each] = encoded
-
-  return df2
+  yr = np.tile(y, 100)
+  
+  return Xr, yr
 
 
-def correlation_matrix(data, target=None):
-  '''
-  Compute the correlation matrix for all predictors (does not include target).
+def confusion_matrices(y, yp):
 
-  Requires a pandas data frame, dictionary, or numpy rec array.
-  '''
-  # Matrix of predictor data
-  predictors = [data[x] for x in data if x != target]
+  cm = confusion_matrix(y, yp)
 
-  # Compute correlation coefficients matrix
-  cor_matrix = np.corrcoef(predictors)
-
-  for row in cor_matrix: 
-    row = " ".join(["{:3.2}".format(x) for x in row ])
-    print(row)
-
-  return cor_matrix
-
-
-def see_distributions(df):
-
-  for each in df:
-    fig = plt.figure()
-    df[each].plot(kind="hist", stacked=True, bins=20, label=each)
-    plt.legend()
+  plt.matshow(cm)
+  plt.title('Confusion matrix')
+  plt.colorbar()
+  plt.ylabel('True label')
+  plt.xlabel('Predicted label')
   plt.show()
+
 
 class LogisticsModel:
 
-  def __init__(self, data, target):
+  def __init__(self, X, y):
 
 
-    train_msk = np.random.rand(len(data)) < 0.75
-    training_data = data[train_msk]
-    testing_data = data[~train_msk]
+    train_msk = np.random.rand(len(y)) < 0.8
+    training_data = X[train_msk]
+    testing_data = X[~train_msk]
 
-    self.training_y = training_data[target]
-    self.training_x = training_data.drop(target, axis=1)
-    self.test_y = testing_data[target]
-    self.test_x = testing_data.drop(target, axis=1)
+    self.training_y = y[train_msk]
+    self.training_x = X[train_msk,]
+    self.testing_y = y[~train_msk]
+    self.testing_x = X[~train_msk,]
 
-    self.solver = mlpy.LibLinear(solver_type='l1r_lr', C=0.01)
     
   def train(self):
 
-    self.solver.learn(self.training_x, self.training_y)
+    classifier = LogisticRegression(penalty='l1', dual=False, tol=0.000001, 
+                                      C=10.0, fit_intercept=True, class_weight=None,
+                                      random_state=None)
+
+    X_train_new = classifier.fit_transform(self.training_x, self.training_y)
+    X_test_new = classifier.transform(self.testing_x)
+
+    self.testing_x = X_test_new
+    self.training_x = X_train_new
+
+    classifier.fit(X_train_new, self.training_y)
+
+    if self.training_x.shape != X_train_new.shape:
+      print("Reduced the number of features from %s to %s.") \
+            % (self.training_x.shape[1], X_train_new.shape[1])
+
+    self.trainer = classifier    
+
+
+  def score(self):
+
+    accuracy_training = self.trainer.score(self.training_x, self.training_y)
+    accuracy_testing = self.trainer.score(self.testing_x, self.testing_y)
+
+    return (accuracy_training, accuracy_testing)
+
+
+  def predict(self, x):
+
+    predicted_y = self.trainer.predict(x)
+
+    return predicted_y
+
+
+  def make_learning_curves(self):
+
+    sizes, t_scores, v_scores = learning_curve(self.trainer, self.training_x, 
+                                               self.training_y)
+    t_scores_mean = np.median(t_scores, axis=1)
+    v_scores_mean = np.median(v_scores, axis=1)
+
+    plt.plot(sizes, t_scores_mean, "go", ls="--", label="Training")
+    plt.plot(sizes, v_scores_mean, "ro", ls="--", label="Validation")
+    plt.legend()
+    plt.show()
+
 
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument("data")
+  parser.add_argument("--s", dest="show", action="store_true", default=False)
   args = parser.parse_args()
 
-  target = "default"
+  # Read in the data to pandas data frame
+  X, y = get_data(args.data)
 
-  df = get_data(args.data)
- 
-  df_normal = normalize_variables(df)
+  # Put data into the Logistic Model object which creates training and testing sets
+  model_env = LogisticsModel(X, y)
 
-  cor_matrix = correlation_matrix(df_normal, target=target)
-
-  model_env = LogisticsModel(df, target=target)
- 
+  # Train the model on the training set
   model_env.train()
 
+  # Score the model on the training and testing set
+  accuracy_training, accuracy_testing = model_env.score()
+  print("Training accuracy: %s; testing accuracy %s.") % (accuracy_training, accuracy_testing)
+
+  # Get preidiction for training set  
+  yp = model_env.predict(model_env.training_x) 
+
+  # Produce learning curves for testing ste and training set
+  model_env.make_learning_curves()
+
+  # Produce graphical representation of the training confusion matrix
+  confusion_matrices(model_env.training_y, yp)
+
+  if args.show: plt.show()
 
 if __name__ == "__main__":
   main()
