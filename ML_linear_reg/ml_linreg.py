@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
 
 
 def make_data(npoints=1000):
@@ -45,10 +46,8 @@ def grad_descent(m, b, x, y, learningRate=0.005):
   return (m_new, b_new)
 
 
-def main():
+def my_fit(x, y):
 
-  # Generate data
-  x, y, m_act, b_act = make_data(npoints=500)
 
   # Initialize random m and b
   m0 = 0.
@@ -70,16 +69,38 @@ def main():
     errors.append(error)
     itNum.append(iteration)
 
-  # Solution and actual
-  print(m0, m_act, b0, b_act)
+  return (m0, b0)
 
-  # Figures
-  fig1 = plt.figure()
-  plt.plot(itNum, errors)
+def sklearn_fit(x, y):
+
+  fitter = LinearRegression(fit_intercept=True)
+
+  x = x.reshape(-1,1)
+  y = y.reshape(-1,1)
+
+  fitter.fit(x, y)
+
+  yfit = fitter.predict(x)
+
+  return yfit
+
+
+def main():
+
+  # Generate data
+  x, y, m_act, b_act = make_data(npoints=500)
+
+  # Fit with sklearn
+  yfit = sklearn_fit(x, y)
+
+  # Fit with my implementation
+  m_fit, b_fit = my_fit(x, y)
 
   fig2 = plt.figure()
   plt.plot(x, y, "ro")
-  plt.plot(x, m0*x+b0, ls="-", color="k")
+  plt.plot(x, m_fit*x+b_fit, ls="-", color="k", lw=4, label="Mine")
+  plt.plot(x, yfit, ls="--", color="g", lw=4, label="Sklearn")
+  plt.legend(loc="best")
   plt.show()
 
 main()
