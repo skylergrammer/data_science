@@ -25,7 +25,7 @@ def generate_random_xy():
 def main():
 
     inside = 0
-    niters = 10000000
+    niters = 1000000
     pivals = []
 
     for iteration in range(niters):
@@ -38,6 +38,7 @@ def main():
         pivals.append(pi)
 
     # plots
+    fig = plt.figure()
     plt.plot([0,niters], [0,0], "k", ls="--", lw=2)
     plt.plot(range(niters), np.array(pivals)-np.pi, "r")
     plt.ylabel("$estimate - \pi$", fontsize=20)
