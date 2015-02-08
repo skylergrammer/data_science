@@ -48,7 +48,7 @@ class TextConstruct:
         
         self.filtered = filtered
         self.tags = ptc.make_tags(tag_counts, maxsize=100)
-        self.filename = "".join([x for x in url_words if x not in ["http:","www"]])+".png"
+        self.filename = "".join([x for x in url_words])+".png"
 
     def generate_cloud(self):
     
