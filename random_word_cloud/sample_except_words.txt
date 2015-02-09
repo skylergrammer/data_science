@@ -1,4 +1,14 @@
-syndrome
 youtube
 google
 yahoo
+http
+www
+https
+org
+com
+gov
+stars
+star
+galaxy
+astrophysics
+galaxies
