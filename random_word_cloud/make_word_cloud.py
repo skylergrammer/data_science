@@ -3,37 +3,58 @@
 missing_modules = []
 import argparse
 import sys
-try:
-    import bs4
-except:
-    missing_modules.append("beautifulsoup")
-try:
-    import requests
-except:
-    missing_modules.append("requests")
-try:
-    import pytagcloud as ptc
-    from pytagcloud.lang.counter import get_tag_counts
-except:
-    missing_modules("pytagcloud")
+import bs4
+import numpy as np
+import requests
+import pytagcloud as ptc
+from pytagcloud.lang.counter import get_tag_counts
 
-if missing_modules:
-    sys.exit("\nYou are missing the following modules: %s\n" 
-             % ",".join(missing_modules))
+class ParentURL:
 
+    def __init__(self, url):
+    
+        self.parent_url = url
 
-def get_raw_text(url):
+        search_list = [url]
+        
+        nth, nlinks, nodiff = 0, 1, 0
+
+        while nlinks < 100 and nodiff < 100:
+            for each in search_list[nth:]:
+                links_within = link_descent(each, url)
+                msk = [links_within.index(x) for x in links_within if x not in search_list]
+                links_within = np.array(links_within)
+
+                search_list += links_within[msk]
+                
+                if not any(msk):
+                    nodiff += 1
+                nlinks += len(msk)
+                nth += 1
+               
+def link_descent(link, parent_url):
+
+        r = requests.get(link)
+    
+        links = bs4.BeautifulSoup(r.content).findAll("link")
+
+        links_list = []
+        for each in links:
+            link_url = each.get("href")
+            if len(link_url.split(parent_url)) > 1:
+               links_list.append(link_url)
+           
+        return  links_list            
+
+def get_raw_text(r):
     '''
     Take the full source html from specified url and convert that into a single
     string of just the body-of-text content.
     '''
 
-    # Retrieve raw html
-    r = requests.get(url)
-    
     # Find all the paragraphs denoted by the tag <p>
     soup = bs4.BeautifulSoup(r.content).findAll("p")
-    
+   
     # Iterate over paragraphs to remove non-alphanumeric characters
     raw_text = []
     for paragraph in soup: 
@@ -45,19 +66,6 @@ def get_raw_text(url):
     raw_text = " ".join(raw_text)
     
     return raw_text
-
-    
-def get_except_words(filename):
-    '''
-    Open file containing the words that should not appear in the word cloud.
-    '''
-    
-    with open(filename, "r") as f:
-        content = f.readlines()
-        
-        except_words = [x.strip("\n") for x in content]  
-
-    return except_words
  
     
 def read_url_list(filename):
@@ -101,34 +109,17 @@ def main():
     parser.add_argument("--url", default="http://en.wikipedia.org/wiki/Star", 
                         help="Either a single url or a text file containing a \
                          list of urls.")
-    parser.add_argument("--c", dest="combine", action="store_true", default=False,
-                        help="If specified, will assume that a list of urls has \
-                        been provided and will make a combined word cloud.")
-    parser.add_argument("--e", dest="except_words", default=False, 
-                        help="Text document containing words to be excluded.")
+
     args = parser.parse_args()
     
-    # If using exception words, read in the words
-    if args.except_words:
-        except_words = get_except_words(args.except_words)
 
-    # If using a list of urls, read in the list
-    if args.combine:
-        url_list = read_url_list(args.url)
-        
-    else:
-        url_list = [args.url]
+   
+    theurl = ParentURL(args.url)
     
-    # Combine
-    list_of_raw_strings = []
-    for each in url_list:       
-        url_raw_text = get_raw_text(each)
-        list_of_raw_strings.append(url_raw_text)
-    
-    raw = " ".join(list_of_raw_strings)
-
+    '''
     foo = TextConstruct(raw, except_words)
-    foo.generate_cloud() 
+    foo.generate_cloud()
+    '''
         
 if __name__ == "__main__":
     main()
