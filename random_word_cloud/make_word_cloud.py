@@ -2,14 +2,14 @@
 
 missing_modules = []
 import argparse
-import sys
 import bs4
 import numpy as np
 import requests
+from nltk.corpus import stopwords
 import pytagcloud as ptc
 from pytagcloud.lang.counter import get_tag_counts
 
-class ParentURL:
+class ParentURLs:
 
     def __init__(self, url):
     
@@ -17,33 +17,58 @@ class ParentURL:
 
         search_list = [url]
         
-        nth, nlinks, nodiff = 0, 1, 0
-
-        while nlinks < 100 and nodiff < 100:
+        nth, npasses = 0, 0
+ 
+        print("Fetching child links for %s..." % url)
+        while npasses < 3:
+            npasses += 1
+            nold, nnew = 0, 0
+            print("Beginning pass %s; searching %s links" % (npasses, len(search_list[nth:])))
             for each in search_list[nth:]:
                 links_within = link_descent(each, url)
-                msk = [links_within.index(x) for x in links_within if x not in search_list]
-                links_within = np.array(links_within)
 
-                search_list += links_within[msk]
+                msk = [links_within.index(x) for x in links_within 
+                       if x not in search_list]
                 
                 if not any(msk):
-                    nodiff += 1
-                nlinks += len(msk)
-                nth += 1
-               
+                    nold += 1
+                else:
+                    print("Found %s new links in %s" % (len(msk), each))
+                    nold = 0
+                    nnew += 1   
+                
+                if nold >= 5*nnew and nold > 10:
+                    break
+                
+                links_within = np.array(links_within)
+                search_list += links_within[msk]
+            nth += 1
+                            
+            if nold > nnew:
+                print("No longer finding new links...")
+                break
+                
+            search_list = list(set(search_list))
+                 
+        print("Fetching child links for %s complete" % url)
+        
+           
 def link_descent(link, parent_url):
 
         r = requests.get(link)
     
-        links = bs4.BeautifulSoup(r.content).findAll("link")
+        links = bs4.BeautifulSoup(r.content).findAll("a")
 
         links_list = []
         for each in links:
-            link_url = each.get("href")
-            if len(link_url.split(parent_url)) > 1:
-               links_list.append(link_url)
-           
+            try:
+                link_url = each.get("href")
+                ext = link_url.split(".")[-1]
+                split = link_url.split(parent_url)
+                if len(split) > 1 and ext == "html" and any(split):
+                    links_list.append(link_url)
+            except:
+                continue
         return  links_list            
 
 def get_raw_text(r):
@@ -114,7 +139,7 @@ def main():
     
 
    
-    theurl = ParentURL(args.url)
+    theurl = ParentURLs(args.url)
     
     '''
     foo = TextConstruct(raw, except_words)
