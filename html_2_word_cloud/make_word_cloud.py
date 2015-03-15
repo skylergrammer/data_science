@@ -1,7 +1,9 @@
 #! /usr/bin/evn python
 
-missing_modules = []
+# Standard Libraries   
 import argparse
+
+# Non-Standard Libraries
 import bs4
 import numpy as np
 import requests
@@ -10,9 +12,10 @@ from nltk.corpus import stopwords
 import pytagcloud as ptc
 from pytagcloud.lang.counter import get_tag_counts
 
+
 class ParentURLSearch:
 
-    def __init__(self, url):
+    def __init__(self, url, pass_=2):
     
         search_list = [url]
         
@@ -22,7 +25,7 @@ class ParentURLSearch:
         print("Fetching child links for %s..." % url)
         
         # Search for at most 3 passes
-        while npasses < 3:
+        while npasses < pass_:
         
             # Up iteration counter
             npasses += 1
@@ -74,27 +77,31 @@ class ParentURLSearch:
         raw_text = []
 
         for url in self.links_list:
-
             r = requests.get(url, auth=HTTPBasicAuth('user', 'pass'))
 
             # Find all the paragraphs denoted by the tag <p>
             soup = bs4.BeautifulSoup(r.content).findAll("p")
        
             for paragraph in soup: 
-                for section in paragraph.findAll(text=True): 
-                    # Remove punctuation
-                    no_punct = " ".join([x.lower() for x in section.split() 
-                                         if x.isalpha()])
+                for section in paragraph.findAll(text=True):
+                    
+                    if section.split():
+                       
+                        # Remove punctuation
+                        no_punct = " ".join([x.lower() for x in section.split()
+                                             if x.isalpha()])
             
-                    # Remove stop words
-                    no_stop_words = [x.strip(" ") for x in no_punct.split(" ") 
-                                     if x not in stop_words]
-                                     
-                    if any(no_stop_words):
-                        print(type(no_stop_words))
-                        # Add words to list
-                        #raw_text += no_stop_words
-     
+                        
+                        # Remove stop words
+                        no_stop_words = [x.strip(" ") for x in no_punct.split(" ") 
+                                         if x not in stop_words]
+                    
+                        if no_stop_words:
+                            # Add words to list
+                            try:
+                                raw_text += no_stop_words
+                            except:
+                                continue
             # Join all of the words together as a space-delimited string        
             raw_text = " ".join(raw_text)
     
